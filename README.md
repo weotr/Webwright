@@ -346,6 +346,48 @@ Note: the named subcommands shipped under [`skills/webwright/commands/`](skills/
 
 </details>
 
+## 📃 Trajectory Comparison & Viewer
+
+You can run the same tasks using the Webwright harness and its Codex / GitHub Copilot skill variant, and see how token usage and trajectories stack up between different harnesses. The trajectory viewer supports Codex, GitHub Copilot and Webwright harness traces.
+
+![Trajectory comparison](assets/trajectory-compare.png)
+
+### How to use
+
+```bash
+cd assets/compare_trajectory/
+python3 -m http.server
+```
+
+Open the webpage in your browser and upload the Webwright `raw_responses.jsonl` and attach `trajectory.json` to view. Then on the other side you can upload your Codex or GitHub Copilot trace.
+
+### Obtaining Codex traces:
+
+```
+ls ~/.codex/sessions/2026/MONTH/DAY/SESSION_ID.jsonl
+```
+
+### Obtaining GitHub Copilot traces:
+
+```
+/export file session
+-> session.md is the uploadable trace
+```
+
+### Quick Comparison
+
+#### "Find the cheapest used 8-cylinder bmw made between 2005-2015 and priced from 25,000 to  50,000 dollars with mileage less than 50,000 miles or less."
+
+| Tokens | Webwright Harness (Local Browser Mode) | Codex Webwright Skill |
+| --- | ---: | ---: |
+| Input | 420,433 | 3,271,143 |
+| Output | 3,593 | 20,040 |
+| Reasoning | 0 | 4,410 |
+| Cached | 217,216 | 3,081,3440 |
+| Total | 424,026 | 3,291,183 |
+
+Individual runs and results may vary.
+
 ---
 
 ## Credits
