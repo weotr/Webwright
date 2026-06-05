@@ -26,7 +26,7 @@ SCREENSHOTS.mkdir(parents=True, exist_ok=True)
 
 async def main():
     async with async_playwright() as playwright:
-        browser = await playwright.firefox.launch(headless=True)
+        browser = await playwright.firefox.launch(headless=False)
         context = await browser.new_context(viewport={"width": 1280, "height": 1800})
         page = await context.new_page()
 
@@ -144,7 +144,7 @@ def log(step: int, msg: str) -> None:
 
 async def main():
     async with async_playwright() as playwright:
-        browser = await playwright.firefox.launch(headless=True)
+        browser = await playwright.firefox.launch(headless=False)
         context = await browser.new_context(viewport={"width": 1280, "height": 1800})
         page = await context.new_page()
 

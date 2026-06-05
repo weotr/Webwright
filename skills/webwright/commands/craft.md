@@ -36,7 +36,7 @@ Steps:
      call, no file write at module top-level.
    - First log line after reset must be
      `step 0 params: <name>=<value> <name>=<value> ...`.
-   - Same instrumentation as default mode: viewport 1280×1800, headless
+   - Same instrumentation as default mode: viewport 1280×1800, headed
      local Firefox, no `full_page=True`, screenshots and final datum
      saved into the run folder.
 

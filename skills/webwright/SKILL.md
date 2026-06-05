@@ -60,7 +60,7 @@ Mirror what `base.yaml`'s `instance_template` requires:
     constraint-relevant interaction; the final datum (price, code, winner,
     quote, etc.) printed at the end.
 - Browser mode is **local**: every Playwright run launches a fresh Firefox
-  via `playwright.firefox.launch(headless=True)`. There is no persistent
+  via `playwright.firefox.launch(headless=False)`. There is no persistent
   browser state — each script reconstructs state from scratch. (Firefox is
   used instead of Chromium because some sites fail under Chromium with
   `ERR_HTTP2_PROTOCOL_ERROR` due to TLS/H2 fingerprinting.)
