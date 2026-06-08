@@ -1,10 +1,11 @@
 # Workflow
 
-Detailed expansion of the six-step Webwright loop, adapted for Claude Code.
-The original loop relied on `webwright.tools.image_qa` for visual QA and
-`webwright.tools.self_reflection` for the final verdict. Both are replaced
-here by your native abilities (`Read` on PNG files + reasoning against
-`plan.md`). No `OPENAI_API_KEY` is required.
+Detailed expansion of the six-step Webwright loop, adapted for playwright-cli
+exploration with agent-level self-healing. The original loop relied on
+`webwright.tools.image_qa` for visual QA and `webwright.tools.self_reflection`
+for the final verdict. Both are replaced here by your native abilities
+(`Read` on PNG files + reasoning against `plan.md`). No `OPENAI_API_KEY`
+is required.
 
 ## 1. Plan
 
@@ -30,19 +31,33 @@ Rules for CPs:
 
 ## 2. Explore
 
-Goal: discover stable selectors, confirm every required filter control
-exists, and identify how to capture evidence for each CP.
+Goal: discover interactive controls, confirm every required filter exists,
+and get stable selectors via `window.playwright.selector()` for each
+element the final script will interact with.
 
-- Run scratch Playwright scripts (see `playwright_patterns.md`) inside
-  `WORKSPACE_DIR/`. Save scratch PNGs under `WORKSPACE_DIR/screenshots/`
-  (separate from `final_runs/`).
-- Print URL, title, and `aria_snapshot()` for the region of interest at
-  every step.
-- Use `Read` on saved PNGs to confirm UI state when ARIA evidence is
+- Use `playwright-cli` commands (one per step, see `playwright_patterns.md`):
+  ```bash
+  PWDEBUG=console playwright-cli open <URL> --headed
+  playwright-cli snapshot --filename=page.yaml
+  ```
+- Read the YAML snapshot to identify element refs (e.g. e721).
+- For each target element, get its stable selector:
+  ```bash
+  playwright-cli eval "(ele) => window.playwright.selector(ele)" e721
+  # Output: get_by_role('button', {name: 'Filters'})
+  ```
+- Verify the selector works with an actual click/fill and a screenshot:
+  ```bash
+  playwright-cli click e721
+  playwright-cli screenshot --filename=screenshots/verify_control.png
+  ```
+- Read screenshots to confirm UI state when the snapshot description is
   ambiguous.
 - If a filter looks unavailable, expand drawers / accordions / mobile
   filter panels and inspect again before concluding it doesn't exist.
 - A search-box query never substitutes for a dedicated filter control.
+- Save scratch screenshots under `WORKSPACE_DIR/screenshots/` (separate
+  from `final_runs/`).
 
 ## 3. Author `final_script.py`
 
@@ -50,7 +65,10 @@ Create a fresh `final_runs/run_<id>/` (use the next integer above any
 existing `run_*`) and place `final_script.py` inside it. Instrument per
 `playwright_patterns.md`:
 
-- viewport 1280×1800, headless local Firefox, no `full_page`;
+- viewport 1280×1800, headless Chromium via `sync_playwright`, no
+  `full_page`;
+- each element interaction uses the single stable selector from
+  `window.playwright.selector()` — no fallback arrays;
 - one `final_execution_<step>_<action>.png` per CP;
 - one `step <n> action: <reason and action>` log line per
   constraint-relevant interaction;
@@ -66,7 +84,7 @@ re-execute — but if a partial run already produced screenshots that don't
 match the fixed flow, delete them so the run folder reflects a single
 clean execution.
 
-## 5. Self-verify (replaces `self_reflection`)
+## 5. Self-verify & Heal (replaces `self_reflection`)
 
 For every CP in `plan.md`:
 
@@ -82,13 +100,33 @@ For every CP in `plan.md`:
 4. Tick the CP only when the evidence is concrete. Be harsh on partial,
    occluded, or ambiguous states.
 
-If any CP fails, diagnose the *specific* issue — wrong filter value,
-missing control, hidden chip, broadened range, missing confirmation,
-missing screenshot, etc. Fix `final_script.py`, run it again inside
-`final_runs/run_<id+1>/`, and re-verify against `plan.md`.
+**If any CP fails → trigger Agent Loop self-healing:**
 
-Empty result sets are acceptable when the correct filters were demonstrably
-applied.
+### Heal sub-steps
+
+1. **Diagnose** the specific issue — wrong filter value, missing control,
+   hidden chip, broadened range, selector failure, missing confirmation,
+   missing screenshot, etc.
+2. **Re-explore** the failure point with playwright-cli:
+   ```bash
+   PWDEBUG=console playwright-cli open <URL> --headed
+   # Re-navigate to the state before the failure
+   playwright-cli snapshot --filename=page_heal.yaml
+   ```
+3. **Re-eval** the failing element's selector:
+   ```bash
+   playwright-cli eval "(ele) => window.playwright.selector(ele)" <ref>
+   ```
+4. **Update `final_script.py`** with the fresh selector (use `Edit` for
+   minimal changes — do NOT rewrite the whole file).
+5. **Re-run** inside `final_runs/run_<id+1>/` and re-verify all CPs
+   against `plan.md`.
+
+The healing loop repeats until all CPs pass or a hard blocker is
+confirmed with repeated evidence from the actual site UI.
+
+Empty result sets are acceptable when the correct filters were
+demonstrably applied.
 
 ## 6. Done
 
@@ -103,5 +141,5 @@ Stop only when **all** of the following are true:
 5. `ls -R final_runs/run_<id>` and `cat final_runs/run_<id>/final_script_log.txt`
    show the expected artifacts.
 
-If any of those is false, do not declare done — diagnose, fix, and re-run
-in a new `run_<id+1>/`.
+If any of those is false, do not declare done — trigger the Heal
+sub-steps (Section 5), fix, and re-run in a new `run_<id+1>/`.

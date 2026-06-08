@@ -102,7 +102,7 @@ Rules:
                            default="<value>",
                            help="<copied from docstring>")
        args = parser.parse_args()
-       result = asyncio.run(_run(**vars(args)))
+       result = _run(**vars(args))
        print(result)
    ```
 
@@ -121,9 +121,25 @@ Rules:
    so the resolved inputs are visible in any verification pass.
 
 6. Same instrumentation as default mode: viewport 1280×1800, headless
-   local Firefox, no `full_page=True`, screenshots saved as
+   Chromium via `sync_playwright`, no `full_page=True`, screenshots saved as
    `final_runs/run_<id>/screenshots/final_execution_<step>_<action>.png`,
    final datum appended to `final_script_log.txt`.
+
+   Element selectors come from `window.playwright.selector()` during
+   exploration and are embedded directly — no fallback arrays.
+
+## Self-healing compatibility
+
+CLI tool mode scripts are still subject to agent-loop self-healing: if
+a parameterized run fails due to selector changes (element moved,
+site update, etc.), the healing flow is:
+
+1. Use `playwright-cli` to re-explore the page with the same parameters.
+2. Re-eval the failing selector via `window.playwright.selector()`.
+3. Update the failing line in `final_script.py` (preserving the CLI
+   shape — only change the selector, not the function signature or
+   argparse definition).
+4. Re-run inside `final_runs/run_<id+1>/` and re-verify.
 
 ## Verification (replaces `self_reflection`)
 

@@ -1,18 +1,16 @@
 ---
 name: webwright
-description: Solve a user-specified web task code-as-action style by driving a local Playwright browser through one bash command at a time, saving screenshots and an action log into `final_runs/run_<id>/`, and visually verifying the result. Use when the user asks to automate a web task (search, filter, form-fill, multi-step flow, data extraction) and wants reusable scripts plus screenshot evidence rather than a one-shot answer.
+description: Solve a user-specified web task code-as-action style by driving a local Playwright browser through playwright-cli exploration commands and one bash command at a time, saving screenshots and an action log into `final_runs/run_<id>/`, and visually verifying the result. Use when the user asks to automate a web task (search, filter, form-fill, multi-step flow, data extraction) and wants reusable scripts plus screenshot evidence rather than a one-shot answer.
 allowed-tools: Bash, Read, Write, Edit, bash, read_file, write_file
 ---
 
 # Webwright (Claude Code adaptation)
 
-You are the Webwright agent. Webwright is normally an LLM-driven loop that
-emits one JSON-wrapped `bash_command` per turn against a local terminal +
-Playwright workspace. In Claude Code, **you replace that loop directly**: use
-the `Bash` tool the same way the `bash_command` field is used in
-`Webwright/src/webwright/config/base.yaml`. You do NOT need to wrap your
-output in JSON — that constraint only existed because the original harness
-parsed model output.
+You are the Webwright agent. In Claude Code, you drive browser automation
+through **playwright-cli** for exploration (snapshot, screenshot, click,
+fill, eval) and **Python `playwright.sync_api`** for the final reusable
+script. You do NOT need to wrap your output in JSON — that constraint only
+existed because the original harness parsed model output.
 
 This skill keeps the *workspace contract* (plan.md, `final_runs/run_<id>/`
 folders, instrumented `final_script.py`, screenshots, action log) but
@@ -34,10 +32,15 @@ own native abilities**: you read PNGs with `Read` and verify success against
 
 ## Prerequisites (one-time)
 
-From the Webwright repo root:
-
 ```bash
-playwright install firefox
+# Install playwright-cli (Node.js) for interactive exploration
+npm install -g @playwright/cli@latest
+
+# Install Chromium browser (PWDEBUG=console injects window.playwright)
+playwright-cli install chromium
+
+# Install Python Playwright (for final_script.py execution)
+pip install playwright
 ```
 
 No API keys needed for this skill.
@@ -59,11 +62,11 @@ Mirror what `base.yaml`'s `instance_template` requires:
     clean run; one `step <n> action: <reason and action>` line per
     constraint-relevant interaction; the final datum (price, code, winner,
     quote, etc.) printed at the end.
-- Browser mode is **local**: every Playwright run launches a fresh Firefox
-  via `playwright.firefox.launch(headless=True)`. There is no persistent
-  browser state — each script reconstructs state from scratch. (Firefox is
-  used instead of Chromium because some sites fail under Chromium with
-  `ERR_HTTP2_PROTOCOL_ERROR` due to TLS/H2 fingerprinting.)
+- Browser mode is **local**: every Playwright run launches a fresh Chrome
+  via `playwright.chromium.launch(channel="chrome", headless=False)`. There is no persistent
+  browser state — each script reconstructs state from scratch.
+- Exploration uses `playwright-cli` with `PWDEBUG=console` to inject
+  `window.playwright` into the browser, enabling stable element selectors.
 - **Always use `viewport={"width": 1280, "height": 1800}`. Never call
   `page.screenshot(full_page=True)`** (exploration, debugging, and final-run
   screenshots alike).
@@ -82,20 +85,38 @@ Mirror what `base.yaml`'s `instance_template` requires:
 
    Each CP must be independently verifiable from a screenshot or a log line.
 
-2. **Explore.** Run scratch Playwright scripts (heredoc-style — see
+2. **Explore.** Use `playwright-cli` commands (see
    `reference/playwright_patterns.md`) to discover stable selectors and
-   confirm filter controls exist. Use `Read` on saved PNGs to inspect UI
-   state. Print ARIA snapshots, URLs, titles, and visible labels for every
-   exploration step.
+   confirm filter controls exist:
 
-3. **Author `final_script.py`** in a fresh `final_runs/run_<id>/`. Instrument
-   it per the contract: reset the log, write a step line for every
+   ```bash
+   PWDEBUG=console playwright-cli open <START_URL> --headed
+   playwright-cli snapshot --filename=page.yaml
+   # Read page.yaml to find element refs (e.g. e721)
+   playwright-cli eval "(ele) => window.playwright.selector(ele)" e721
+   # Output: get_by_role('button', {name: 'Filters'})
+   playwright-cli click e721
+   playwright-cli screenshot --filename=screenshots/explore_1.png
+   ```
+
+   Use `Read` on saved PNGs and YAML snapshots to inspect UI state. For
+   every critical element, capture its stable selector via
+   `window.playwright.selector()` so it can be embedded directly into
+   `final_script.py`.
+
+3. **Author `final_script.py`** in a fresh `final_runs/run_<id>/`. Use
+   `playwright.sync_api` (sync_playwright) with Chromium. Instrument it
+   per the contract: reset the log, write a step line for every
    constraint-relevant action, save a uniquely-named screenshot for every
    critical point, and print the final datum into the log at the end.
 
+   Each element interaction uses the stable selectors obtained from
+   `window.playwright.selector()` during exploration. No fallback arrays
+   or wrapper functions — the script stays simple and direct.
+
 4. **Execute** the final script once. Capture stdout/stderr.
 
-5. **Self-verify** (this replaces `webwright.tools.self_reflection`). Walk
+5. **Self-verify & Heal** (replaces `webwright.tools.self_reflection`). Walk
    `plan.md`:
    - For each CP, identify a screenshot path AND/OR a log line that proves
      it. `Read` each cited PNG and confirm the evidence is unambiguous (the
@@ -103,10 +124,15 @@ Mirror what `base.yaml`'s `instance_template` requires:
      reflects the constraint, etc.).
    - Tick the CP only when evidence is concrete. Be harsh with ambiguous,
      occluded, or partially-applied states.
-   - If any CP fails, diagnose the specific issue (wrong filter value,
-     missing control, selection hidden after drawer closed, broadened range,
-     missing confirmation, missing screenshot). Fix `final_script.py`,
-     re-run inside `final_runs/run_<id+1>/`, and re-verify.
+   - **If any CP fails**, diagnose the specific issue. Then trigger the
+     **Agent Loop self-healing**:
+     1. Use `playwright-cli` to re-snapshot the current page and re-eval
+        selectors for any elements that failed.
+     2. Update `final_script.py` with the new stable selectors.
+     3. Re-run inside `final_runs/run_<id+1>/` and re-verify.
+   - This self-healing loop replaces the old "diagnose → fix → re-run"
+     pattern: instead of guessing selector fixes, you use playwright-cli
+     to get fresh, reliable selectors from the live page.
 
 6. **Done.** Only when every CP in `plan.md` is checked off with cited
    evidence. Report the final datum to the user.
@@ -114,7 +140,11 @@ Mirror what `base.yaml`'s `instance_template` requires:
 ## Hard Rules
 
 - One bash command per step; observe its output before issuing the next.
-- Use stable selectors and current-run evidence — never guess UI state.
+- **Exploration uses `playwright-cli`; never** write Python heredoc scripts
+  for exploration. Only `final_script.py` is a Python file.
+- Use stable selectors from `window.playwright.selector()` in the final
+  script — never hard-code CSS classes, XPaths, or brittle text matches
+  from visual inspection alone.
 - If a site exposes a dedicated control for a requirement, you **must** use
   that control. A search-box query never satisfies an explicit filter,
   sort, style, or attribute requirement.
@@ -135,17 +165,22 @@ Mirror what `base.yaml`'s `instance_template` requires:
 - If the task asks for a final datum (code, price, quote, review, winner,
   benefit list), state that datum explicitly to the user **and** append it
   to `final_script_log.txt`.
-- Do **not** install extra packages with pip/apt. `playwright`, `httpx`,
-  `pydantic`, etc. are already installed.
+- Do **not** install extra packages with pip/apt. `playwright`, `playwright-cli`,
+  `httpx`, `pydantic`, etc. are already installed.
 - Once `final_script.py` exists, prefer incremental edits (`Edit`) over
   rewriting the whole file.
+- On selector failure during verification, **always** use playwright-cli to
+  re-explore and get fresh selectors — never blindly guess or tweak
+  selectors by hand.
 
 ## Reference Files
 
-- `reference/playwright_patterns.md` — browser-launch heredoc skeleton,
-  `aria_snapshot()` recipes, screenshot naming, log format.
-- `reference/workflow.md` — detailed walk-through of plan → explore →
-  final → self-verify, plus the completion checklist.
+- `reference/playwright_patterns.md` — playwright-cli exploration command
+  templates, `window.playwright.selector()` stable-selector workflow,
+  `sync_playwright` final-script skeleton, agent-loop self-healing triggers
+  and repair flow.
+- `reference/workflow.md` — detailed walk-through of plan → playwright-cli
+  explore → final → self-verify/heal, plus the completion checklist.
 - `reference/cli_tool_mode.md` — contract for CLI tool mode
   (`# Parameters` table, reusable function + argparse, import-safety,
   `step 0 params:` log line, completion gate).

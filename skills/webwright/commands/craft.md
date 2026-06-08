@@ -24,7 +24,11 @@ Steps:
    concrete task values so `python final_script.py` (no args) reproduces
    the task.
 
-3. **Author `final_script.py`** in a fresh `final_runs/run_<id>/`:
+3. **Explore with `playwright-cli`** (`PWDEBUG=console`, snapshot,
+   eval `window.playwright.selector()`, click, fill, screenshot) to
+   discover stable selectors for each interactive element.
+
+4. **Author `final_script.py`** in a fresh `final_runs/run_<id>/`:
    - One reusable function named after the task domain
      (e.g. `def search_<domain>(arg_a, arg_b, ...): ...`).
    - Google-style docstring with summary, full `Args:` block (name, type,
@@ -37,26 +41,30 @@ Steps:
    - First log line after reset must be
      `step 0 params: <name>=<value> <name>=<value> ...`.
    - Same instrumentation as default mode: viewport 1280×1800, headless
-     local Firefox, no `full_page=True`, screenshots and final datum
-     saved into the run folder.
+     Chromium via `sync_playwright`, no `full_page=True`, screenshots and
+     final datum saved into the run folder.
+   - Each element uses the stable selector from `window.playwright.selector()`
+     — no fallback arrays.
 
-4. **Reproduce the task with no arguments.** Run
+5. **Reproduce the task with no arguments.** Run
    `python final_runs/run_<id>/final_script.py` and confirm it succeeds
    end-to-end.
 
-5. **Import-safety smoke test.** Load the module in a separate Python
+6. **Import-safety smoke test.** Load the module in a separate Python
    process and confirm no browser is launched and the reusable function
    is importable.
 
-6. **Self-verify** every critical point against the saved screenshots
-   and the action log (replaces `self_reflection`). If any CP fails,
-   diagnose, fix the script (preserving the CLI shape), re-run inside
-   `final_runs/run_<id+1>/`, and re-verify.
+7. **Self-verify** every critical point against the saved screenshots
+   and the action log. On failure, trigger agent-loop self-healing:
+   re-explore with playwright-cli, get fresh selectors, update the
+   script (preserving CLI shape), re-run inside `final_runs/run_<id+1>/`,
+   and re-verify.
 
-7. **Show the user `--help`.** End by running
+8. **Show the user `--help`.** End by running
    `python final_runs/run_<id>/final_script.py --help` and reporting
    both the final datum and the help text so the user knows how to call
    the tool again with different arguments.
 
 Refer to `reference/cli_tool_mode.md` for the complete contract and
-`reference/playwright_patterns.md` for the Playwright skeleton.
+`reference/playwright_patterns.md` for the exploration and script
+templates.
