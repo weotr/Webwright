@@ -105,7 +105,7 @@ Mirror what `base.yaml`'s `instance_template` requires:
    `final_script.py`.
 
 3. **Author `final_script.py`** in a fresh `final_runs/run_<id>/`. Use
-   `playwright.sync_api` (sync_playwright) with Chromium. Instrument it
+   `playwright.sync_api` (sync_playwright) with headed Chrome. Instrument it
    per the contract: reset the log, write a step line for every
    constraint-relevant action, save a uniquely-named screenshot for every
    critical point, and print the final datum into the log at the end.
@@ -177,8 +177,9 @@ Mirror what `base.yaml`'s `instance_template` requires:
 
 - `reference/playwright_patterns.md` — playwright-cli exploration command
   templates, `window.playwright.selector()` stable-selector workflow,
-  `sync_playwright` final-script skeleton, agent-loop self-healing triggers
-  and repair flow.
+  iframe handling (FrameLocator vs Locator, e/f-prefixed refs, iframe-relative
+  selectors), complex form interaction patterns, `sync_playwright`
+  final-script skeleton, agent-loop self-healing triggers and repair flow.
 - `reference/workflow.md` — detailed walk-through of plan → playwright-cli
   explore → final → self-verify/heal, plus the completion checklist.
 - `reference/cli_tool_mode.md` — contract for CLI tool mode

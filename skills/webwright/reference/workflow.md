@@ -65,7 +65,7 @@ Create a fresh `final_runs/run_<id>/` (use the next integer above any
 existing `run_*`) and place `final_script.py` inside it. Instrument per
 `playwright_patterns.md`:
 
-- viewport 1280×1800, headless Chromium via `sync_playwright`, no
+- viewport 1280×1800, headed Chrome (use channel="chrome") via `sync_playwright`, no
   `full_page`;
 - each element interaction uses the single stable selector from
   `window.playwright.selector()` — no fallback arrays;
