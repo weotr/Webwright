@@ -38,6 +38,7 @@ element the final script will interact with.
 - Use `playwright-cli` commands (one per step, see `playwright_patterns.md`):
   ```bash
   PWDEBUG=console playwright-cli open <URL> --headed
+  # Browser is now on CDP http://localhost:9222 (via .playwright/cli.config.json)
   playwright-cli snapshot --filename=page.yaml
   ```
 - Read the YAML snapshot to identify element refs (e.g. e721).
@@ -65,7 +66,8 @@ Create a fresh `final_runs/run_<id>/` (use the next integer above any
 existing `run_*`) and place `final_script.py` inside it. Instrument per
 `playwright_patterns.md`:
 
-- viewport 1280×1800, headed Chrome (use channel="chrome") via `sync_playwright`, no
+- viewport 1280×1800, connect to shared Chrome via
+  `connect_over_cdp("http://localhost:9222")` and `sync_playwright`, no
   `full_page`;
 - each element interaction uses the single stable selector from
   `window.playwright.selector()` — no fallback arrays;
@@ -107,10 +109,10 @@ For every CP in `plan.md`:
 1. **Diagnose** the specific issue — wrong filter value, missing control,
    hidden chip, broadened range, selector failure, missing confirmation,
    missing screenshot, etc.
-2. **Re-explore** the failure point with playwright-cli:
+2. **Re-explore** the failure point with playwright-cli. The shared
+   Chrome is still running with the page at its failure state — no
+   re-launch or re-navigation needed:
    ```bash
-   PWDEBUG=console playwright-cli open <URL> --headed
-   # Re-navigate to the state before the failure
    playwright-cli snapshot --filename=page_heal.yaml
    ```
 3. **Re-eval** the failing element's selector:

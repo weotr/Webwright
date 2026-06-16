@@ -120,8 +120,9 @@ Rules:
 
    so the resolved inputs are visible in any verification pass.
 
-6. Same instrumentation as default mode: viewport 1280×1800, headless
-   Chromium via `sync_playwright`, no `full_page=True`, screenshots saved as
+6. Same instrumentation as default mode: viewport 1280×1800, connect to
+   shared Chrome via `sync_playwright` + `connect_over_cdp`, no
+   `full_page=True`, screenshots saved as
    `final_runs/run_<id>/screenshots/final_execution_<step>_<action>.png`,
    final datum appended to `final_script_log.txt`.
 
@@ -134,7 +135,8 @@ CLI tool mode scripts are still subject to agent-loop self-healing: if
 a parameterized run fails due to selector changes (element moved,
 site update, etc.), the healing flow is:
 
-1. Use `playwright-cli` to re-explore the page with the same parameters.
+1. Use `playwright-cli` (already attached to the shared Chrome) to
+   re-explore the page at its current state — no re-navigation needed.
 2. Re-eval the failing selector via `window.playwright.selector()`.
 3. Update the failing line in `final_script.py` (preserving the CLI
    shape — only change the selector, not the function signature or

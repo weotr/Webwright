@@ -1,0 +1,10 @@
+{
+  "browser": {
+    "browserName": "chromium",
+    "launchOptions": {
+      "channel": "chrome",
+      "headless": false,
+      "args": ["--remote-debugging-port=9222"]
+    }
+  }
+}

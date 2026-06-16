@@ -33,15 +33,41 @@ own native abilities**: you read PNGs with `Read` and verify success against
 ## Prerequisites (one-time)
 
 ```bash
-# Install playwright-cli (Node.js) for interactive exploration
-npm install -g @playwright/cli@latest
-
-# Install Chromium browser (PWDEBUG=console injects window.playwright)
-playwright-cli install chromium
+# Install playwright-cli (Node.js, >= 0.1.14) for interactive exploration
+npm install -g playwright-cli@">=0.1.14"
 
 # Install Python Playwright (for final_script.py execution)
 pip install playwright
 ```
+
+### Browser config file
+
+Create `.playwright/cli.config.json` in the workspace root:
+
+```json
+{
+  "browser": {
+    "browserName": "chromium",
+    "launchOptions": {
+      "channel": "chrome",
+      "headless": false,
+      "args": ["--remote-debugging-port=9222"]
+    }
+  }
+}
+```
+
+This tells playwright-cli to start Chrome with BOTH its internal
+`--remote-debugging-pipe` (for playwright-cli) AND `--remote-debugging-port=9222`
+(for Python `connect_over_cdp`). The browser is shared across exploration,
+script execution, and self-healing.
+
+**Pre-flight check**: before any Webwright task, verify port 9222 is free:
+```bash
+curl -s http://localhost:9222/json/version
+```
+If it returns data, a browser is already running on 9222 — kill it first
+(`playwright-cli kill-all`).
 
 No API keys needed for this skill.
 
@@ -62,11 +88,19 @@ Mirror what `base.yaml`'s `instance_template` requires:
     clean run; one `step <n> action: <reason and action>` line per
     constraint-relevant interaction; the final datum (price, code, winner,
     quote, etc.) printed at the end.
-- Browser mode is **local**: every Playwright run launches a fresh Chrome
-  via `playwright.chromium.launch(channel="chrome", headless=False)`. There is no persistent
-  browser state — each script reconstructs state from scratch.
-- Exploration uses `playwright-cli` with `PWDEBUG=console` to inject
-  `window.playwright` into the browser, enabling stable element selectors.
+- Browser mode is **shared via CDP**: playwright-cli starts a single Chrome
+  instance (via `PWDEBUG=console playwright-cli open --headed` with the
+  `.playwright/cli.config.json` above). The browser exposes CDP on port 9222,
+  so Python scripts connect to the SAME browser via
+  `playwright.chromium.connect_over_cdp("http://localhost:9222")`.
+  - The browser persists across exploration, script execution, and
+    self-healing cycles.
+  - Python scripts call `browser.close()` on completion (success or failure)
+    to disconnect the CDP client and cleanly release control back to
+    playwright-cli. This does NOT kill the browser — it only drops the
+    Python CDP connection.
+  - playwright-cli uses `PWDEBUG=console` to inject `window.playwright`
+    into the browser, enabling stable element selectors.
 - **Always use `viewport={"width": 1280, "height": 1800}`. Never call
   `page.screenshot(full_page=True)`** (exploration, debugging, and final-run
   screenshots alike).
@@ -91,6 +125,7 @@ Mirror what `base.yaml`'s `instance_template` requires:
 
    ```bash
    PWDEBUG=console playwright-cli open <START_URL> --headed
+   # Browser is now on CDP http://localhost:9222 (Python can connect)
    playwright-cli snapshot --filename=page.yaml
    # Read page.yaml to find element refs (e.g. e721)
    playwright-cli eval "(ele) => window.playwright.selector(ele)" e721
@@ -105,7 +140,8 @@ Mirror what `base.yaml`'s `instance_template` requires:
    `final_script.py`.
 
 3. **Author `final_script.py`** in a fresh `final_runs/run_<id>/`. Use
-   `playwright.sync_api` (sync_playwright) with headed Chrome. Instrument it
+   `playwright.sync_api` (sync_playwright) connecting to the shared Chrome
+   via `connect_over_cdp("http://localhost:9222")`. Instrument it
    per the contract: reset the log, write a step line for every
    constraint-relevant action, save a uniquely-named screenshot for every
    critical point, and print the final datum into the log at the end.
@@ -125,14 +161,16 @@ Mirror what `base.yaml`'s `instance_template` requires:
    - Tick the CP only when evidence is concrete. Be harsh with ambiguous,
      occluded, or partially-applied states.
    - **If any CP fails**, diagnose the specific issue. Then trigger the
-     **Agent Loop self-healing**:
-     1. Use `playwright-cli` to re-snapshot the current page and re-eval
+     **Agent Loop self-healing** (the shared browser still has the page at
+     its failure state — no re-launch or re-navigation needed):
+     1. Use `playwright-cli` to re-snapshot the **current** page and re-eval
         selectors for any elements that failed.
      2. Update `final_script.py` with the new stable selectors.
      3. Re-run inside `final_runs/run_<id+1>/` and re-verify.
    - This self-healing loop replaces the old "diagnose → fix → re-run"
      pattern: instead of guessing selector fixes, you use playwright-cli
-     to get fresh, reliable selectors from the live page.
+     to get fresh, reliable selectors from the **live, still-open page**
+     in the shared browser.
 
 6. **Done.** Only when every CP in `plan.md` is checked off with cited
    evidence. Report the final datum to the user.
@@ -169,9 +207,13 @@ Mirror what `base.yaml`'s `instance_template` requires:
   `httpx`, `pydantic`, etc. are already installed.
 - Once `final_script.py` exists, prefer incremental edits (`Edit`) over
   rewriting the whole file.
-- On selector failure during verification, **always** use playwright-cli to
-  re-explore and get fresh selectors — never blindly guess or tweak
-  selectors by hand.
+- On selector failure during verification, **always** use playwright-cli
+  (already attached to the shared browser) to re-explore the current page
+  and get fresh selectors — never blindly guess or tweak selectors by hand.
+- **Always call `browser.close()` at the end of `final_script.py`**
+  (success or failure). In CDP mode this only disconnects the Python
+  client — the browser stays alive. This cleanly releases control back
+  to playwright-cli for self-healing.
 - **Never use `force: true` or JS DOM manipulation.** Use only real
   Playwright APIs — operate the browser like a human. If an element is
   intercepted, dismiss the overlay first; if a field is readonly, click

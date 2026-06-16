@@ -24,9 +24,10 @@ Steps:
    concrete task values so `python final_script.py` (no args) reproduces
    the task.
 
-3. **Explore with `playwright-cli`** (`PWDEBUG=console`, snapshot,
-   eval `window.playwright.selector()`, click, fill, screenshot) to
-   discover stable selectors for each interactive element.
+3. **Explore with `playwright-cli`** (launch with `PWDEBUG=console`,
+   snapshot, eval `window.playwright.selector()`, click, fill, screenshot)
+   to discover stable selectors for each interactive element. The
+   `.playwright/cli.config.json` exposes CDP on port 9222 for Python.
 
 4. **Author `final_script.py`** in a fresh `final_runs/run_<id>/`:
    - One reusable function named after the task domain
@@ -40,9 +41,10 @@ Steps:
      call, no file write at module top-level.
    - First log line after reset must be
      `step 0 params: <name>=<value> <name>=<value> ...`.
-   - Same instrumentation as default mode: viewport 1280×1800, headless
-     Chromium via `sync_playwright`, no `full_page=True`, screenshots and
-     final datum saved into the run folder.
+   - Same instrumentation as default mode: viewport 1280×1800, connect to
+     shared Chrome via `sync_playwright` + `connect_over_cdp`, no
+     `full_page=True`, screenshots and final datum saved into the run
+     folder.
    - Each element uses the stable selector from `window.playwright.selector()`
      — no fallback arrays.
 
@@ -56,8 +58,9 @@ Steps:
 
 7. **Self-verify** every critical point against the saved screenshots
    and the action log. On failure, trigger agent-loop self-healing:
-   re-explore with playwright-cli, get fresh selectors, update the
-   script (preserving CLI shape), re-run inside `final_runs/run_<id+1>/`,
+   the shared Chrome still has the page open — re-snapshot and re-eval
+   with playwright-cli, get fresh selectors, update the script
+   (preserving CLI shape), re-run inside `final_runs/run_<id+1>/`,
    and re-verify.
 
 8. **Show the user `--help`.** End by running

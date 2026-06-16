@@ -14,6 +14,8 @@ run one, observe its output, then decide the next step.
 
 ```bash
 PWDEBUG=console playwright-cli open <START_URL> --headed
+# Browser now exposes CDP on http://localhost:9222 (via .playwright/cli.config.json)
+# Python scripts connect to the same browser with connect_over_cdp("http://localhost:9222")
 ```
 
 `PWDEBUG=console` injects `window.playwright` into the browser, enabling
@@ -90,8 +92,8 @@ Record all selector mappings so the final script authoring is
 straightforward: copy each stable selector directly into the Python code.
 
 Rules:
-- **Always** run `PWDEBUG=console` when launching the browser, or
-  `window.playwright` will not be available.
+- **Always** run `PWDEBUG=console` when launching the browser via
+  `playwright-cli open`, or `window.playwright` will not be available.
 - **Always** verify the selector with an actual click/fill before adding
   it to the final script.
 - **Always** take a before/after screenshot pair to confirm the
@@ -120,6 +122,24 @@ it before capturing the verification screenshot.
 **not** include the iframe's own location. Using that selector on `page`
 will time out. You must first obtain a `FrameLocator`, then chain the
 selector on it. See the "iframe Handling" section below.
+
+## Python: connect to the same browser
+
+While playwright-cli owns the browser, Python scripts connect via CDP:
+
+```python
+from playwright.sync_api import sync_playwright
+
+with sync_playwright() as pw:
+    browser = pw.chromium.connect_over_cdp("http://localhost:9222")
+    context = browser.new_context(viewport={"width": 1280, "height": 1800})
+    page = context.new_page()
+    # ... interact with page ...
+    browser.close()  # disconnects CDP client, browser stays alive
+```
+
+`browser.close()` only drops the Python CDP connection — the browser
+process stays alive for playwright-cli to take over during self-healing.
 
 ## iframe Handling
 
@@ -499,7 +519,7 @@ def log(step: int, msg: str) -> None:
 
 def main():
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(channel="chrome", headless=False)
+        browser = playwright.chromium.connect_over_cdp("http://localhost:9222")
         context = browser.new_context(viewport={"width": 1280, "height": 1800})
         page = context.new_page()
 
@@ -521,7 +541,7 @@ def main():
         with LOG.open("a") as f:
             f.write(f"\nFINAL_RESPONSE: {final_value}\n")
 
-        browser.close()
+        browser.close()  # disconnects CDP client; browser stays alive
 
 if __name__ == "__main__":
     main()
@@ -531,8 +551,12 @@ Rules:
 - **Always** set `viewport={"width": 1280, "height": 1800}`.
 - **Never** call `page.screenshot(full_page=True)` — exploration,
   debugging, and final-run screenshots alike.
-- Each Playwright run is fresh: navigate from the start URL, reapply
-  filters, reconstruct state in code. There is no persistent session.
+- Each script run creates a fresh browser context (new page, isolated
+  cookies/storage) within the shared Chrome. Navigate from the start URL
+  and reconstruct state in code.
+- **Always call `browser.close()` at script end.** In CDP mode this only
+  disconnects the Python client — the browser stays alive for playwright-cli
+  to take over during self-healing.
 - Script stays simple: each element uses the single stable selector from
   `window.playwright.selector()`, no fallback arrays or wrapper functions.
 
@@ -551,28 +575,24 @@ fails), the agent does NOT hand-edit selectors by guessing. Instead:
 
 ### Healing flow
 
-1. **Re-open the page** using playwright-cli:
-   ```bash
-   PWDEBUG=console playwright-cli open <URL> --headed
-   ```
+The shared Chrome browser still has the page open at its failure state
+after `final_script.py` calls `browser.close()`. No re-launch or
+re-navigation is needed — playwright-cli is already attached:
 
-2. **Re-navigate** to the state where the failure occurred (repeat the
-   interactions that worked, up to the failing step).
-
-3. **Re-snapshot** the page at the failure point:
+1. **Re-snapshot** the current page (still alive in the shared Chrome):
    ```bash
    playwright-cli snapshot --filename=page_heal.yaml
    ```
 
-4. **Re-eval** the selector for the target element:
+2. **Re-eval** the selector for the target element:
    ```bash
    playwright-cli eval "(ele) => window.playwright.selector(ele)" <ref>
    ```
 
-5. **Update `final_script.py`**: replace the failing selector with the
-   fresh one from step 4. Use `Edit` for minimal changes.
+3. **Update `final_script.py`**: replace the failing selector with the
+   fresh one from step 2. Use `Edit` for minimal changes.
 
-6. **Re-run** inside `final_runs/run_<id+1>/` and re-verify all CPs.
+4. **Re-run** inside `final_runs/run_<id+1>/` and re-verify all CPs.
 
 The healing loop continues until all CPs pass or a hard blocker is confirmed.
 
