@@ -172,6 +172,19 @@ Mirror what `base.yaml`'s `instance_template` requires:
 - On selector failure during verification, **always** use playwright-cli to
   re-explore and get fresh selectors — never blindly guess or tweak
   selectors by hand.
+- **Never use `force: true` or JS DOM manipulation.** Use only real
+  Playwright APIs — operate the browser like a human. If an element is
+  intercepted, dismiss the overlay first; if a field is readonly, click
+  its trigger widget. Never use `evaluate()`, `dispatch_event()`, or
+  `force: true` to bypass the UI.
+- **Popups: discover the confirm button's frame during exploration.**
+  The "确定" button may live in a different iframe than the popup form.
+  Determine this during `playwright-cli` exploration (by snapshot ref
+  prefix), not with a blind cross-frame loop in `final_script.py`.
+  Similarly, scope same-name buttons to the visible popup container.
+- **After clicking "确定", verify the popup actually closed.** A
+  "请先选择数据" validation warning can block closure silently — the
+  click succeeds but the popup stays open. Always screenshot-confirm.
 
 ## Reference Files
 

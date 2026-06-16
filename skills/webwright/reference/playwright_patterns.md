@@ -228,7 +228,13 @@ frame.locator(".lee-icon").first.click()
 frame.locator(".lee-text-field").fill("测试名称")
 
 # Step 3: Confirm/close the popup
-frame.get_by_role("button", name="确定").click()
+# ⚠️ The confirm button may be in a different frame than the form.
+# During exploration, use playwright-cli to identify which frame it lives in.
+# Then reference the correct frame directly:
+confirm_frame.get_by_role("button", name="确定").click()
+# `confirm_frame` = the frame discovered during exploration (may be `frame`,
+# `page`, or another `page.frame_locator()`). See `find_confirm_button()`
+# helper below for the generic fallback pattern.
 ```
 
 ### General pattern for complex controls
@@ -259,7 +265,7 @@ recognition because no single DOM attribute reliably identifies them.
 | Visual marker | Special unicode icon at field's right side | `` or similar glyph |
 | Behavioral | Field is `readonly` + adjacent element has `cursor: pointer` | clickable icon next to input |
 
-**Interaction flow (3 steps):**
+**Interaction flow (4 steps):**
 
 ```
 Step 1: Click the trigger icon/button next to the field
@@ -267,8 +273,13 @@ Step 1: Click the trigger icon/button next to the field
 Step 2: Identify the popup iframe (name="lookupwindow" or similar)
         → Search keyword or directly select the target row
         → Select the target row
+        → Verify row is highlighted/checked (screenshot!)
         ↓
 Step 3: Click "确定" (Confirm) to close the popup and backfill
+        ↓
+Step 4: Verify the popup CLOSED (screenshot after)
+        → If still open: a "请先选择数据" warning may have appeared.
+          Dismiss it, ensure a row is selected, then click "确定" again.
 ```
 
 **Discovering lookup controls during exploration:**
@@ -303,8 +314,8 @@ frame.locator(".lee-icon.lee-ion-android-more-horizontal").first.click()
 popup_frame = frame.frame_locator("iframe[name='lookupwindow']")
 popup_frame.get_by_title("Target Row Text").click()
 
-# Confirm selection
-frame.get_by_role("link", name="确定").click()
+# Confirm — the frame was determined during exploration (see below)
+confirm_frame.get_by_role("link", name="确定").click()
 ```
 
 If the popup provides a search field before row selection:
@@ -321,18 +332,130 @@ popup_frame.get_by_role("button", name="搜索").click()
 # Select result row
 popup_frame.get_by_title("Target Row Text").click()
 
-# Confirm
-frame.get_by_role("link", name="确定").click()
+# Confirm — the frame was determined during exploration (see below)
+confirm_frame.get_by_role("link", name="确定").click()
 ```
 
 **Key points:**
 - The lookup popup is almost always an **iframe** — treat it with
   `page.frame_locator()`, never `page.locator("iframe").content_frame()`.
+- **The "确定" confirm button is often NOT inside the lookup popup's
+  iframe.** It typically resides in the parent frame or a sibling iframe.
+  Always search across frames rather than assuming it's in the same one.
+- **Verify the popup actually closed after clicking "确定".** If no data row
+  was selected, the app may show a validation warning ("请先选择数据" /
+  "Please select data first") instead of closing the popup. After clicking
+  "确定", take a screenshot to confirm the popup disappeared. If it didn't:
+  1. Check for and dismiss the validation warning (often a toast or a
+     small alert near the bottom of the popup).
+  2. Select the target data row, then click "确定" again.
 - After confirmation, verify the backfilled value with a screenshot or
   by reading the field's `value` attribute.
 - Some apps load the popup in a new browser window instead of an iframe —
   check `playwright-cli snapshot` for `f*` refs first; if none appear, look
   for a new page/tab.
+
+### Discovery: which frame holds the confirm button?
+
+During exploration, use `playwright-cli` to determine the correct frame for
+the "确定" button — do NOT hard-code a cross-frame search loop in the final
+script. The exploration phase already answers this question:
+
+```bash
+# 1. After the popup is open, snapshot the full page
+playwright-cli snapshot --filename=popup_open.yaml
+
+# 2. Search for "确定" in the YAML — note its ref prefix:
+#    e123 → lives in the main frame (page)
+#    f1e45 → lives in iframe #1 (frame.frame_locator("iframe").nth(1))
+#    f2e67 → lives in iframe #2
+```
+
+Then in `final_script.py`, assign the correct frame object:
+
+```python
+# Determined during exploration — no loop needed:
+confirm_frame = frame                         # if ref was e* (same frame)
+# or
+confirm_frame = page                          # if ref was e* (main frame)
+# or
+confirm_frame = page.frame_locator("iframe[name='lookupwindow']")  # if ref was f1*
+
+confirm_frame.get_by_role("link", name="确定").click()
+```
+
+### Fallback: `find_confirm_button()` utility
+
+If you absolutely need a generic fallback (rare — prefer exploration-driven
+discovery), define this helper once at the top of the script:
+
+```python
+def find_confirm_button(page, frame, name="确定"):
+    """Find a visible confirm button across all frames.
+    
+    Prefer exploration-driven discovery over this fallback.
+    The correct frame should already be known from playwright-cli exploration.
+    """
+    for candidate in [frame] + page.frames:
+        try:
+            btn = candidate.get_by_role("link", name=name)
+            if btn.is_visible():
+                return btn
+        except:
+            continue
+    raise RuntimeError(f"Could not find visible '{name}' button in any frame")
+
+# Usage:
+find_confirm_button(page, frame).click()
+```
+
+## Table Column Header-to-Cell Mapping
+
+Before clicking any table cell, you **must** map header columns to data cell
+indices. Clicking the wrong column is the most common table automation bug
+and is invisible until you screenshot-verify.
+
+### Mapping workflow
+
+```
+1. Snapshot the table page and locate the header row
+2. List column index → column name:
+    列0 → 对方性质
+    列1 → 收款方    ← TARGET
+    列2 → 收款户名
+    列3 → 收款账号
+3. In the data row, count cells from 0 to find the target cell
+4. Confirm the cell ref matches the target column index
+5. Click, then screenshot to verify the correct cell was activated
+   (e.g. the correct cell should now show a textbox/search icon)
+```
+
+### Mapping template
+
+During exploration, record the mapping in comments:
+
+```python
+# Column mapping: 0=对方性质 | 1=收款方 | 2=收款户名 | 3=收款账号 | ...
+# Row: "内部员工 0.00 申请"
+# Click cell[1] (收款方)
+row.get_by_role("cell").nth(1).click()  # or use stable selector from eval
+page.screenshot(path=str(SCREENSHOTS / "final_execution_N_click_payee.png"))
+# Verify: read screenshot → confirm search icon / textbox appeared in the
+# correct column, not an adjacent one
+```
+
+### Traps
+
+- **Trap**: Seeing a row "内部员工 | 0.00 | 申请" and clicking the middle
+  cell assuming it's the right column.
+  **Fix**: Count cell indices from the header row first. Cell index 1 might
+  be "收款方" while index 2 is "收款户名" — visually similar but different
+  semantic columns.
+- **Trap**: Using `get_by_role('row', name='...')` with Unicode icons in
+  the row name.
+  **Fix**: Row names often contain Unicode icon characters (`\ue113`,
+  `\ue302`) that cause Python encoding errors. Use `get_by_text()` for the
+  visible text portion instead.
 
 ## Prefer interactive form filling over deep-link URLs
 
@@ -452,6 +575,88 @@ fails), the agent does NOT hand-edit selectors by guessing. Instead:
 6. **Re-run** inside `final_runs/run_<id+1>/` and re-verify all CPs.
 
 The healing loop continues until all CPs pass or a hard blocker is confirmed.
+
+## Never Force DOM / Never Use `force: true`
+
+These are hard-unsafe patterns that produce brittle, unreliable scripts.
+They are **always forbidden** in both exploration and final scripts.
+
+### Forbidden operations
+
+```python
+# ❌ FORBIDDEN — NEVER use any of these:
+element.click(force=True)                               # force:true
+element.evaluate("el => el.removeAttribute('readonly')")  # JS DOM mutation
+element.evaluate("el => el.value = 'xxx'")               # JS value injection
+page.evaluate("document.querySelector(...).click()")      # JS click bypass
+element.dispatch_event("click")                           # synthetic event
+```
+
+### What to do instead
+
+**When an element is intercepted by another element (modal/overlay):**
+
+```python
+# ❌ WRONG: force-click through the overlay
+page.get_by_role("button", name="保存").click(force=True)
+
+# ✅ RIGHT: dismiss the overlay first, then click normally
+# Preferred: the correct frame should already be known from exploration
+# (see "Discovery: which frame holds the confirm button?" above).
+# Use the generic loop below only as a last-resort fallback.
+# Strategy 1: Find and click the visible confirm/close button
+# The button might be in a DIFFERENT iframe than the current one!
+# Try each iframe until you find the visible "确定" button:
+for frame in page.frames:
+    try:
+        ok_button = frame.get_by_role("button", name="确定")
+        if ok_button.is_visible():
+            ok_button.click()
+            break
+    except:
+        continue
+
+# Strategy 2: If the overlay is a known modal class, scope within it
+page.locator(".modal-overlay").get_by_role("button", name="取消").click()
+
+# Strategy 3: Use keyboard to dismiss (if it responds to Escape)
+page.keyboard.press("Escape")
+```
+
+**When a field is readonly and needs a lookup value:**
+
+```python
+# ❌ WRONG: remove the readonly attribute with JS
+field.evaluate("el => el.removeAttribute('readonly')")
+field.fill("some value")
+
+# ✅ RIGHT: click the trigger icon that opens the lookup widget
+field.locator("..").locator(".lee-icon").click()
+# Then interact with the popup (see "Lookup Helper" section above)
+```
+
+**When multiple same-name buttons exist on the page:**
+
+```python
+# ❌ WRONG: unscoped selector may match the wrong "确定"
+page.get_by_role("link", name="确定").click()
+
+# ✅ RIGHT: scope to the visible popup/dialog container
+page.locator(".lee-window").get_by_role("link", name="确定").click()
+# Or find the visible one across iframes
+for frame in page.frames:
+    btn = frame.locator(".dialog-visible").get_by_role("button", name="确定")
+    if btn.is_visible():
+        btn.click()
+        break
+```
+
+### Key principle
+
+Always interact with the browser like a human user would:
+- A human cannot `force: true` through an overlay — they dismiss it first.
+- A human cannot `evaluate()` into a readonly field — they click the widget.
+- A human sees which "确定" is on the active popup — scope selectors the same way.
 
 ## Inspection commands
 
