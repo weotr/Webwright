@@ -1,8 +1,8 @@
 {
   "name": "webwright",
   "owner": {
-    "name": "Microsoft Research",
-    "url": "https://github.com/microsoft/Webwright"
+    "name": "weotr",
+    "url": "https://github.com/weotr/Webwright"
   },
   "plugins": [
     {
