@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -173,6 +175,30 @@ class LocalWorkspaceEnvironment:
                 env[var] = value
         return env
 
+    def _resolve_shell(self) -> str | None:
+        """Resolve the configured shell to a usable executable path.
+
+        On Windows, ``subprocess.run(shell=True, executable='cmd.exe')`` fails
+        because the bare name is not resolved against PATH in that code path.
+        We resolve it ourselves (via ``shutil.which`` / ``COMSPEC``) so the
+        subprocess layer receives a full path.
+        """
+        shell = self.config.shell
+        if sys.platform != "win32":
+            return shell
+        # If it's already a full path, use it directly.
+        if os.path.isabs(shell) and os.path.isfile(shell):
+            return shell
+        # Try shutil.which first (respects PATH).
+        resolved = shutil.which(shell)
+        if resolved:
+            return resolved
+        # Fall back to COMSPEC (the system default shell).
+        comspec = os.environ.get("COMSPEC", "")
+        if comspec and os.path.isfile(comspec):
+            return comspec
+        return shell
+
     def execute(self, action: dict[str, Any], cwd: str = "") -> dict[str, Any]:
         self._step_index += 1
         command = str(
@@ -192,7 +218,7 @@ class LocalWorkspaceEnvironment:
             result = subprocess.run(
                 command,
                 shell=True,
-                executable=self.config.shell,
+                executable=self._resolve_shell(),
                 text=True,
                 cwd=resolved_cwd,
                 env=command_env,

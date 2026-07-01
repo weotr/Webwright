@@ -26,6 +26,13 @@ _CHROMIUM_EXECUTABLE_CANDIDATES = (
     "~/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    # Windows Chrome
+    "C:/Program Files/Google/Chrome/Application/chrome.exe",
+    "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+    # Windows Edge
+    "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+    "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
+    # Linux
     "google-chrome",
     "google-chrome-stable",
     "chromium-browser",
@@ -245,7 +252,7 @@ class LocalBrowserEnvironment:
         self._steps_dir().mkdir(parents=True, exist_ok=True)
         self._screenshots_dir().mkdir(parents=True, exist_ok=True)
         (self.config.output_dir / "task.json").write_text(
-            json.dumps(kwargs, indent=2),
+            json.dumps(kwargs, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
         self._run(self._prepare_async())

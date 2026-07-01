@@ -55,7 +55,7 @@ environment:
   start_url:
   output_dir: outputs/default
   command_timeout_seconds: 240
-  shell: /bin/bash
+  shell: cmd.exe # windows 使用cmd.exe, unix 使用bash
   # Path to a shell file that exports credentials (BROWSERBASE_API_KEY,
   # BROWSERBASE_PROJECT_ID, ANTHROPIC_API_KEY, OPENAI_API_KEY, ...). Leave
   # empty to read these from the parent process environment instead.
@@ -74,6 +74,8 @@ environment:
     LESS: -R
     PIP_PROGRESS_BAR: 'off'
     TQDM_DISABLE: '1'
+    HTTP_PROXY: "http://10.110.81.14:8066"
+    HTTPS_PROXY: "http://10.110.81.14:8066"
 
 run:
   # Optional default values that can be overridden via the CLI.
@@ -85,7 +87,7 @@ agent:
   agent_class: default
   debug_log: true
   output_path: outputs/default/trajectory.json
-  step_limit: 100
+  step_limit: 100 # 限制步数
   require_self_reflection_success: true
   summary_every_n_steps: 20
 
@@ -103,8 +105,10 @@ agent:
     Emit exactly ONE JSON object per turn. Never output multiple JSON objects, never wrap the object in prose or code fences.
 
     Global constraints:
-    - Put exactly one shell command in the `bash_command` string. Never emit raw Python or shell outside that field. Use heredocs (`python - <<'PY' ... PY`) to run Python inline when needed.
+    - Put exactly one shell command in the `bash_command` string. Never emit raw Python or shell outside that field.
+    - **CRITICAL: You are running on Windows cmd.exe. Heredocs (`<<`) do NOT work. To run Python, ALWAYS write the script to a .py file first, then execute it. Example: `echo import os > script.py && python script.py` for simple scripts, or use Python to write multi-line files: `python -c "open('s.py','w').write('...')" && python s.py`.**
     - Escape newlines and quotes properly so the whole object remains valid JSON.
+    - **You MUST output valid JSON. If you output plain text, it will be rejected and you will waste turns. Always start your response with `{` and end with `}`.**
     - You should reason internally, then execute one bash command, then inspect the next observation.
     - There is NO persistent browser state. Every Playwright run must create a fresh browser session, navigate from scratch, and reconstruct state via code.
     - Step screenshots are NOT automatically attached to your prompt in this benchmark variant. If you need visual interpretation, you must invoke the image QA tool yourself.
