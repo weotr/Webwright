@@ -133,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
         question=args.question,
         model_client=model_client,
     )
-    print(json.dumps(result, ensure_ascii=True, indent=2))
+    print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
 

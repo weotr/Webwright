@@ -162,7 +162,7 @@ class LocalWorkspaceEnvironment:
         self._logs_dir().mkdir(parents=True, exist_ok=True)
         self._screenshots_dir().mkdir(parents=True, exist_ok=True)
         (workspace_dir / ".tmp").mkdir(parents=True, exist_ok=True)
-        self._task_metadata_path().write_text(json.dumps(kwargs, indent=2), encoding="utf-8")
+        self._task_metadata_path().write_text(json.dumps(kwargs, indent=2, ensure_ascii=False), encoding="utf-8")
 
     def _browser_env(self) -> dict[str, str]:
         """Forward Browserbase / browser-mode hints to the subprocess."""

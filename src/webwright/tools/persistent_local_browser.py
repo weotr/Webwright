@@ -160,7 +160,7 @@ def _cmd_create(args: argparse.Namespace) -> int:
         "headless": bool(args.headless),
         "createdAt": int(time.time()),
     }
-    out_path.write_text(json.dumps(session, indent=2) + "\n", encoding="utf-8")
+    out_path.write_text(json.dumps(session, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     print(f"LB_SESSION_ID={session['id']}")
     print(f"LB_SESSION_PID={session['pid']}")
@@ -176,7 +176,7 @@ def _cmd_info(args: argparse.Namespace) -> int:
         return 1
     session = json.loads(session_path.read_text(encoding="utf-8"))
     session["alive"] = _pid_alive(int(session.get("pid", 0)))
-    print(json.dumps(session, indent=2))
+    print(json.dumps(session, indent=2, ensure_ascii=False))
     return 0
 
 

@@ -17,5 +17,5 @@ def append_runtime_log(path: Path | None, *, source: str, event: str, **data: An
         **data,
     }
     with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(payload, ensure_ascii=True))
+        handle.write(json.dumps(payload, ensure_ascii=False))
         handle.write("\n")

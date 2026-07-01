@@ -136,7 +136,7 @@ class DefaultAgent:
             "final_response": extra.get("final_response", ""),
             "outputs": outputs or [],
         }
-        (steps_dir / f"step_{step_index:04d}.json").write_text(json.dumps(payload, indent=2))
+        (steps_dir / f"step_{step_index:04d}.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
         summary_path = debug_dir / "steps.md"
         with summary_path.open("a", encoding="utf-8") as handle:
@@ -171,7 +171,7 @@ class DefaultAgent:
                 )
                 handle.write("### Observation\n\n")
                 handle.write("```json\n")
-                handle.write(f"{json.dumps(markdown_observation, indent=2)}\n")
+                handle.write(f"{json.dumps(markdown_observation, indent=2, ensure_ascii=False)}\n")
                 handle.write("```\n\n")
 
     def get_template_vars(self, **kwargs) -> dict[str, Any]:
@@ -463,5 +463,5 @@ class DefaultAgent:
         data = self.serialize(*extra_dicts)
         if path is not None:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(data, indent=2))
+            path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
         return data
