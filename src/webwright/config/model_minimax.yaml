@@ -1,0 +1,13 @@
+# Model modifier — MiniMax-M3 chat completions variant.
+#
+# Stack on top of base.yaml:
+#   python -m webwright.run.cli -c base.yaml -c model_minimax.yaml ...
+#
+# Required env: MINIMAX_API_KEY.
+# MiniMax-M3 supports multimodal input (text + image), compatible with
+# image_qa and self_reflection tools.
+
+model:
+  model_class: minimax
+  model_name: MiniMax-M3
+  minimax_endpoint: https://api.minimaxi.com/v1/chat/completions
