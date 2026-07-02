@@ -210,6 +210,7 @@ class BaseModelConfig(PydanticBaseModel):
     model_name: OptStr = ""
     max_output_tokens: int = 4000
     request_timeout_seconds: int = 120
+    proxy: str | None = None
     error_log_path: Path | None = None
     observation_template: OptStr = DEFAULT_OBSERVATION_TEMPLATE
     format_error_template: OptStr = DEFAULT_FORMAT_ERROR_TEMPLATE
@@ -436,7 +437,7 @@ class BaseModel:
         url = self._post_url()
         for attempt in range(max(self._MAX_RATE_LIMIT_RETRIES, self._MAX_TRANSIENT_RETRIES) + 1):
             try:
-                async with httpx.AsyncClient(timeout=self.config.request_timeout_seconds) as client:
+                async with httpx.AsyncClient(timeout=self.config.request_timeout_seconds, proxy=self.config.proxy, verify=False) as client:
                     response = await client.post(url, headers=headers, json=payload)
                     response.raise_for_status()
                     return response.json()

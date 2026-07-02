@@ -50,6 +50,8 @@ model:
       "final_response": ""
     }
 
+  # proxy: "http://ip:port" # proxy to observe the traffic
+
 environment:
   environment_class: local_workspace
   start_url:
@@ -74,8 +76,6 @@ environment:
     LESS: -R
     PIP_PROGRESS_BAR: 'off'
     TQDM_DISABLE: '1'
-    HTTP_PROXY: "http://10.110.81.14:8066"
-    HTTPS_PROXY: "http://10.110.81.14:8066"
 
 run:
   # Optional default values that can be overridden via the CLI.
